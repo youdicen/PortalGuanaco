@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=Outfit:wght@100..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-carbon text-cream font-sans antialiased overflow-x-hidden relative;
+  }
+}
+
+@layer utilities {
+  .noise-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 50;
+    opacity: 0.05;
+  }
+  
+  .magnetic-button {
+    @apply relative overflow-hidden transition-transform duration-300 transform rounded-full;
+  }
+  
+  .magnetic-button:hover {
+    @apply scale-105;
+  }
+
+  .premium-blur {
+    filter: blur(8px);
+    user-select: none;
+    transition: filter 0.3s ease;
+  }
+}
