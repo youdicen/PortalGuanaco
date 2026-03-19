@@ -10,7 +10,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
 function App() {
   return (
-    <Router>
+    <Router basename="/PortalGuanaco/">
       <Layout>
         <Routes>
           <Route path="/" element={

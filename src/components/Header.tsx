@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Shield, LogOut, LayoutDashboard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export const Header: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
@@ -47,13 +47,13 @@ export const Header: React.FC = () => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Shield className="w-6 h-6 text-cream" />
-          <a href="/" className="font-sans font-bold text-lg tracking-tight text-cream">PortalGuanaco</a>
+          <Link to="/" className="font-sans font-bold text-lg tracking-tight text-cream">PortalGuanaco</Link>
         </div>
         
         <nav className="hidden md:flex items-center gap-8 font-mono text-sm uppercase tracking-widest text-cream/70">
-          <a href="/#features" className="hover:text-cream transition-colors">Características</a>
-          <a href="/#protocol" className="hover:text-cream transition-colors">Protocolo</a>
-          <a href="/#philosophy" className="hover:text-cream transition-colors">Visión</a>
+          <a href="#features" className="hover:text-cream transition-colors">Características</a>
+          <a href="#protocol" className="hover:text-cream transition-colors">Protocolo</a>
+          <a href="#philosophy" className="hover:text-cream transition-colors">Visión</a>
           {session && (
             <button 
               onClick={() => navigate('/dashboard')}
