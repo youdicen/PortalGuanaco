@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { apiFetch } from '../lib/api';
 import { Loader2, Star, Tag as TagIcon, Plus, Trash2, Phone, Calendar } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -23,57 +23,44 @@ export const RecordForm: React.FC = () => {
 
   useEffect(() => {
     const checkUserAndFetchData = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate('/auth');
-        return;
-      }
-      setUser(session.user);
+      try {
+        const { user: currentUser } = await apiFetch('/auth.php?action=me');
+        setUser(currentUser);
 
-      if (editId) {
-        setIsEditMode(true);
-        setIsLoading(true);
-        
-        const { data: record, error } = await supabase
-          .from('phone_records')
-          .select(`
-            *,
-            tags:phone_tags(tag_name)
-          `)
-          .eq('id', editId)
-          .single();
-
-        if (error || !record) {
-          setMessage({ type: 'error', text: 'No se encontró el reporte para editar.' });
+        if (editId) {
+          setIsEditMode(true);
+          setIsLoading(true);
+          
+          const { data: record } = await apiFetch(`/records.php?action=get&id=${editId}`);
+          
+          if (!record) {
+            setMessage({ type: 'error', text: 'No se encontró el reporte para editar.' });
+          } else {
+            setCountryCode(record.country_code);
+            setPhoneNumber(record.phone_number);
+            setRating(record.reputation_stars);
+            setSelectedTags(record.tags?.map((t: any) => t.tag_name) || []);
+          }
+          setIsLoading(false);
         } else {
-          setCountryCode(record.country_code);
-          setPhoneNumber(record.phone_number);
-          setRating(record.reputation_stars);
-          setSelectedTags(record.tags?.map((t: any) => t.tag_name) || []);
+          // Fetch recent active records if in create mode
+          fetchMyRecords();
         }
-        setIsLoading(false);
-      } else {
-        // Fetch recent active records if in create mode
-        fetchMyRecords(session.user.id);
+      } catch (err) {
+        navigate('/auth');
       }
     };
     checkUserAndFetchData();
   }, [navigate, editId]);
 
-  const fetchMyRecords = async (userId: string) => {
-    const { data: recordsData } = await supabase
-      .from('phone_records')
-      .select(`
-        id, country_code, phone_number, reputation_stars, created_at,
-        tags:phone_tags(tag_name)
-      `)
-      .eq('created_by', userId)
-      .neq('is_hidden', true)
-      .order('created_at', { ascending: false })
-      .limit(5);
-    
-    if (recordsData) {
-      setMyRecords(recordsData);
+  const fetchMyRecords = async () => {
+    try {
+      const { data } = await apiFetch('/records.php?action=my_records');
+      if (data) {
+        setMyRecords(data.slice(0, 5)); // Limit in frontend just in case
+      }
+    } catch (err) {
+      console.error('Error fetching records:', err);
     }
   };
 
@@ -102,99 +89,29 @@ export const RecordForm: React.FC = () => {
     setIsLoading(true);
     setMessage(null);
 
-    const ensureProfile = async () => {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .single();
-      
-      if (!profile) {
-        // Create missing profile
-        const { error: insertError } = await supabase
-          .from('profiles')
-          .insert({
-            id: user.id,
-            email: user.email,
-            phone_number: user.user_metadata?.phone_number || 'Registro Manual'
-          });
-        
-        if (insertError) {
-          console.error('Error creating profile:', insertError);
-          throw new Error(`Error de perfil: ${insertError.message} (Código: ${insertError.code})`);
-        }
-      }
-    };
-
     try {
-      await ensureProfile();
+      await apiFetch('/records.php?action=save', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: isEditMode ? editId : null,
+          countryCode,
+          phoneNumber,
+          stars: rating,
+          tags: selectedTags
+        })
+      });
 
       if (isEditMode) {
-        // Update record
-        const { data: updatedRecord, error: updateError } = await supabase
-          .from('phone_records')
-          .update({
-            country_code: countryCode,
-            phone_number: phoneNumber,
-            reputation_stars: rating
-          })
-          .eq('id', editId)
-          .select(); // Requerido para ver si RLS silenciosamente descartó la fila
-
-        if (updateError) throw updateError;
-        
-        if (!updatedRecord || updatedRecord.length === 0) {
-          throw new Error('Error de Seguridad (RLS): El servidor rechazó la actualización silenciosamente. Verifica las políticas de Supabase.');
-        }
-
-        // Update tags
-        const { error: delError } = await supabase.from('phone_tags').delete().eq('record_id', editId);
-        if (delError) throw delError;
-        
-        if (selectedTags.length > 0) {
-          const tagsToInsert = selectedTags.map(tag => ({
-            record_id: editId,
-            tag_name: tag
-          }));
-          const { error: insError } = await supabase.from('phone_tags').insert(tagsToInsert);
-          if (insError) throw insError;
-        }
-
         setMessage({ type: 'success', text: 'Reporte actualizado exitosamente en la base de datos.' });
         setTimeout(() => navigate('/dashboard'), 1500);
       } else {
-        // Insert new record
-        const { data: recordData, error: recordError } = await supabase
-          .from('phone_records')
-          .insert({
-            country_code: countryCode,
-            phone_number: phoneNumber,
-            reputation_stars: rating,
-            created_by: user.id
-          })
-          .select()
-          .single();
-
-        if (recordError) throw recordError;
-
-        if (selectedTags.length > 0 && recordData) {
-          const tagsToInsert = selectedTags.map(tag => ({
-            record_id: recordData.id,
-            tag_name: tag
-          }));
-          const { error: tagsError } = await supabase
-            .from('phone_tags')
-            .insert(tagsToInsert);
-          if (tagsError) throw tagsError;
-        }
-
         setMessage({ type: 'success', text: 'Registro guardado exitosamente.' });
         setPhoneNumber('');
         setRating(0);
         setSelectedTags([]);
         
         // Refresh the local list
-        fetchMyRecords(user.id);
+        fetchMyRecords();
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Error al procesar el registro.' });
@@ -318,20 +235,16 @@ export const RecordForm: React.FC = () => {
                 onClick={async () => {
                   if (!confirm('¿Estás seguro de eliminar (ocultar) este reporte?')) return;
                   setIsLoading(true);
-                  const { data, error } = await supabase
-                    .from('phone_records')
-                    .update({ is_hidden: true })
-                    .eq('id', editId)
-                    .select();
-                    
-                  setIsLoading(false);
-                  
-                  if (error) {
-                    setMessage({ type: 'error', text: 'Error al intentar eliminar: ' + error.message });
-                  } else if (!data || data.length === 0) {
-                    setMessage({ type: 'error', text: 'Permiso denegado por la Base de Datos.' });
-                  } else {
+                  try {
+                    await apiFetch('/records.php?action=delete', {
+                      method: 'POST',
+                      body: JSON.stringify({ id: editId })
+                    });
                     navigate('/dashboard');
+                  } catch (error: any) {
+                    setMessage({ type: 'error', text: 'Error al intentar eliminar: ' + error.message });
+                  } finally {
+                    setIsLoading(false);
                   }
                 }}
                 className="w-full sm:w-auto p-4 sm:px-6 sm:py-3 rounded-2xl bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500 hover:text-white transition-all font-sans font-medium text-sm flex items-center justify-center gap-2"

@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { Shield, ArrowRight, Loader2, Key } from 'lucide-react';
+import { apiFetch } from '../lib/api';
+import { Loader2, Key, Shield, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 export const AuthView: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
+  const [countryCode, setCountryCode] = useState('+503');
   const [otpCode, setOtpCode] = useState('');
   const [showOtp, setShowOtp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [message, setMessage] = useState<{ type: 'error' | 'success', text: string } | null>(null);
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -21,44 +24,52 @@ export const AuthView: React.FC = () => {
     setMessage(null);
 
     try {
+      if (!showOtp && !isForgotPassword && !recaptchaToken) {
+        setMessage({ type: 'error', text: 'Por favor completa el captcha para continuar.' });
+        setIsLoading(false);
+        return;
+      }
+
       if (showOtp) {
-        const { error } = await supabase.auth.verifyOtp({
-          email,
-          token: otpCode,
-          type: 'signup'
+        const data = await apiFetch('/auth.php?action=verify', {
+          method: 'POST',
+          body: JSON.stringify({ email, code: otpCode })
         });
-        if (error) throw error;
+        localStorage.setItem('token', data.token);
         navigate('/submit');
         return;
       }
 
       if (isForgotPassword) {
-        const { error } = await supabase.auth.resetPasswordForEmail(email);
-        if (error) throw error;
-        setMessage({ type: 'success', text: 'Si el correo existe, se enviará un enlace de recuperación en breve.' });
+        setMessage({ type: 'error', text: 'Por favor contacta al administrador para recuperar tu cuenta.' });
       } else if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              phone_number: phone
-            }
-          }
+        await apiFetch('/auth.php?action=register', {
+          method: 'POST',
+          body: JSON.stringify({ email, password, phone_number: `${countryCode}${phone}`, recaptcha: recaptchaToken })
         });
-        if (error) throw error;
         setShowOtp(true);
         setMessage({ type: 'success', text: 'Ingresa el código enviado a tu correo para activar tu cuenta.' });
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+        const data = await apiFetch('/auth.php?action=login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password, recaptcha: recaptchaToken })
         });
-        if (error) throw error;
+        localStorage.setItem('token', data.token);
         navigate('/submit');
       }
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Ha ocurrido un error durante la autenticación.' });
+      if (error.message === 'Cuenta no verificada.') {
+        setShowOtp(true);
+        setMessage({ type: 'success', text: 'Por favor, verifica tu cuenta.' });
+        
+        // Reenviar código
+        await apiFetch('/auth.php?action=register', {
+          method: 'POST',
+          body: JSON.stringify({ email, password, phone_number: `${countryCode}${phone}`, recaptcha: recaptchaToken })
+        }).catch(() => {}); // ignore error on resend
+      } else {
+        setMessage({ type: 'error', text: error.message || 'Ha ocurrido un error durante la autenticación.' });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -112,14 +123,25 @@ export const AuthView: React.FC = () => {
               {isSignUp && (
                 <div className="flex flex-col gap-2">
                   <label className="font-mono text-[10px] uppercase tracking-widest text-cream/50 pl-2">Teléfono Personal</label>
-                  <input 
-                    type="tel" 
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    required
-                    className="bg-carbon border border-white/10 rounded-2xl px-4 py-3 text-cream font-sans text-sm focus:outline-none focus:border-clay/50 transition-colors"
-                    placeholder="+503 0000 0000"
-                  />
+                  <div className="flex bg-carbon border border-white/10 rounded-2xl overflow-hidden focus-within:border-clay/50 transition-colors">
+                    <select 
+                      value={countryCode}
+                      onChange={(e) => setCountryCode(e.target.value)}
+                      className="bg-transparent text-cream px-3 py-3 font-mono text-sm border-r border-white/5 outline-none appearance-none cursor-pointer"
+                    >
+                      <option value="+503" className="bg-carbon">+503 (SV)</option>
+                      <option value="+502" className="bg-carbon">+502 (GT)</option>
+                      <option value="+504" className="bg-carbon">+504 (HN)</option>
+                    </select>
+                    <input 
+                      type="tel" 
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 15))}
+                      required
+                      className="bg-transparent text-cream px-4 py-3 font-sans text-sm w-full outline-none placeholder:text-cream/20"
+                      placeholder="0000 0000"
+                    />
+                  </div>
                 </div>
               )}
 
@@ -165,6 +187,16 @@ export const AuthView: React.FC = () => {
               <p className="text-[10px] text-cream/30 text-center font-sans">
                 Busca en tu bandeja de entrada el código de 6 dígitos.
               </p>
+            </div>
+          )}
+
+          {!showOtp && !isForgotPassword && (
+            <div className="flex justify-center my-2">
+              <ReCAPTCHA
+                sitekey="6LfvErAsAAAAAN9hVeGl3k9uqxRduc7Ci-IjWh70"
+                onChange={(token) => setRecaptchaToken(token)}
+                theme="dark"
+              />
             </div>
           )}
 

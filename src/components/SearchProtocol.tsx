@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Star, AlertCircle, EyeOff, ShieldAlert } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { apiFetch } from '../lib/api';
 
 export const SearchProtocol: React.FC = () => {
   const [countryCode, setCountryCode] = useState('+503');
@@ -22,36 +22,26 @@ export const SearchProtocol: React.FC = () => {
     try {
       const cleanCountryCode = countryCode.replace('+', '');
       
-      const { data, error } = await supabase
-        .from('phone_records')
-        .select(`
-          country_code,
-          phone_number,
-          reputation_stars,
-          created_at,
-          tags:phone_tags(tag_name)
-        `)
-        .eq('country_code', cleanCountryCode)
-        .eq('phone_number', phoneNumber)
-        .neq('is_hidden', true)
-        .order('created_at', { ascending: true });
+      const { data } = await apiFetch(`/records.php?action=search&q=${phoneNumber}`);
 
-      if (error) throw error;
+      // Filtrar adicionalmente por country code en el lado del cliente o confiar en the backend, aunque el backend no filtra por country_code
+      // Asi que mejor filtramos
+      const filteredData = (data || []).filter((r: any) => r.country_code === cleanCountryCode);
 
-      if (data && data.length > 0) {
+      if (filteredData.length > 0) {
         // Agrupar datos si hay múltiples reportes activos del mismo número
-        const totalStars = data.reduce((acc, curr) => acc + curr.reputation_stars, 0);
-        const avgStars = Math.round(totalStars / data.length);
+        const totalStars = filteredData.reduce((acc: number, curr: any) => acc + curr.reputation_stars, 0);
+        const avgStars = Math.round(totalStars / filteredData.length);
         
-        const allTags = data.flatMap(r => r.tags?.map((t: any) => t.tag_name) || []);
+        const allTags = filteredData.flatMap((r: any) => r.tags?.map((t: any) => t.tag_name) || []);
         const uniqueTags = [...new Set(allTags)];
 
         setSearchResult({
-          country_code: '+' + data[0].country_code,
-          phone_number: data[0].phone_number,
+          country_code: '+' + filteredData[0].country_code,
+          phone_number: filteredData[0].phone_number,
           reputation_stars: avgStars,
           tags: uniqueTags,
-          created_at: data[0].created_at // Como lo ordenamos por ascending, el [0] es el más antiguo
+          created_at: filteredData[0].created_at // Como lo ordenamos por ascending, el [0] es el más antiguo
         });
       } else {
         setSearchResult("not_found");

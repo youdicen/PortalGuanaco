@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Shield, LogOut, LayoutDashboard } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { apiFetch } from '../lib/api';
 import { useNavigate, Link } from 'react-router-dom';
 
 export const Header: React.FC = () => {
@@ -9,17 +9,22 @@ export const Header: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+    // Check active session using token logic
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const { user } = await apiFetch('/auth.php?action=me');
+          setSession({ user });
+        } catch {
+          localStorage.removeItem('token');
+          setSession(null);
+        }
+      } else {
+        setSession(null);
+      }
+    };
+    checkAuth();
 
     const handleScroll = () => {
       setScrolled(window.scrollY > 50);
@@ -28,12 +33,12 @@ export const Header: React.FC = () => {
     window.addEventListener('scroll', handleScroll);
     return () => {
       window.removeEventListener('scroll', handleScroll);
-      subscription.unsubscribe();
     };
   }, []);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setSession(null);
     navigate('/');
   };
 

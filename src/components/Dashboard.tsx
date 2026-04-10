@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { apiFetch } from '../lib/api';
 import { 
   BarChart3, 
   Search, 
@@ -33,35 +33,19 @@ export const Dashboard: React.FC = () => {
 
   const fetchUserData = async () => {
     setIsLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) {
+    try {
+      // Perfil
+      const { user: profileData } = await apiFetch('/auth.php?action=me');
+      setProfile(profileData);
+
+      // Registros Propios
+      const { data: recordsData } = await apiFetch('/records.php?action=my_records');
+      setRecords(recordsData || []);
+    } catch (error) {
       navigate('/auth');
-      return;
+    } finally {
+      setIsLoading(false);
     }
-
-    // Perfil
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-    
-    setProfile(profileData);
-
-    // Registros Propios
-    const { data: recordsData, error } = await supabase
-      .from('phone_records')
-      .select(`
-        *,
-        tags:phone_tags(tag_name)
-      `)
-      .eq('created_by', user.id)
-      .neq('is_hidden', true)
-      .order('created_at', { ascending: false });
-
-    if (!error) setRecords(recordsData || []);
-    setIsLoading(false);
   };
 
   if (isLoading) {
@@ -79,7 +63,7 @@ export const Dashboard: React.FC = () => {
           <h1 className="font-serif italic text-4xl text-cream mb-2">Panel de Control</h1>
           <div className="flex items-center gap-3 text-cream/40 font-mono text-xs uppercase tracking-widest">
             <ShieldCheck className="w-4 h-4 text-green-500" />
-            <span>ID: {profile?.phone_number || 'Cargando...'}</span>
+            <span>ID: {profile?.id ? profile.id.split('-')[0] : '...'}</span>
             <span className="w-1 h-1 rounded-full bg-white/20"></span>
             <span>{profile?.email}</span>
           </div>
