@@ -1,6 +1,8 @@
 import React from 'react';
 import { Header } from './Header';
 import { Footer } from './Footer';
+import { BackToTop } from './BackToTop';
+import { Constellation } from './Constellation';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -9,6 +11,9 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <div className="min-h-screen flex flex-col relative w-full overflow-hidden">
+      {/* Neuronal Synapse Background */}
+      <Constellation />
+
       {/* Global Noise Overlay Preset A */}
       <div className="noise-overlay pointer-events-none fixed inset-0 z-50">
         <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" preserveAspectRatio="none">
@@ -26,6 +31,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       </main>
 
       <Footer />
+      <BackToTop />
     </div>
   );
 };

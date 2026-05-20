@@ -25,3 +25,8 @@ dist-ssr
 
 # Security
 scratch/
+
+# Temp dev files
+body.json
+body2.json
+test_fetch.js
